@@ -1,7 +1,6 @@
 import sqlite3
 import requests
-
-steam_api_key = 'D6881F1A95967818F6681A29FC24F72B'
+from steamapikey import steam_api_key
 
 # set up db
 conn = sqlite3.connect('steam_db.sqlite')

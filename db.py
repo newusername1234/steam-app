@@ -49,38 +49,45 @@ except TypeError:
     print('fetching data for new entry...')
 
 # only fetch if they havent been fetched within the last day
-cur.execute('SELECT last_fetched FROM User WHERE steamid=? AND last_fetched>julianday("now")-1', (search_id,))
+cur.execute(
+    'SELECT last_fetched FROM User WHERE steamid=? AND last_fetched>julianday("now")-1', (search_id,))
 if cur.fetchone() == None:
     # get ids
-    res = requests.get(f'http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key={steam_api_key}&steamid={search_id}&relationship=friend')
-    friends = res.json()['friendslist']['friends']
-    # start with own id and add ids from friend list
+    res = requests.get(
+        f'http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key={steam_api_key}&steamid={search_id}&relationship=friend')
     steam_ids = [search_id]
-    for friend in friends:
-        # add friends to friend table
-        cur.execute('INSERT OR IGNORE INTO Friend VALUES (?,?)', (search_id, friend['steamid']))
-        steam_ids.append(str(friend['steamid']))
+    try:
+        friends = res.json()['friendslist']['friends']
+        # start with own id and add ids from friend list
+        for friend in friends:
+            # add friends to friend table
+            cur.execute('INSERT OR IGNORE INTO Friend VALUES (?,?)',
+                        (search_id, friend['steamid']))
+            steam_ids.append(str(friend['steamid']))
+    except KeyError:
+        pass
 
     # get both user and friends profile data
-    res = requests.get(f'http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={",".join(steam_ids)}')
+    res = requests.get(
+        f'http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={",".join(steam_ids)}')
     user_data = res.json()['response']['players']
     # remove stuff we dont care about
     to_remove = ['communityvisibilitystate',
-                'profilestate',
-                'commentpermission',
-                'lastlogoff',
-                'personastate',
-                'realname',
-                'primaryclanid',
-                'personastateflags',
-                'timecreated',
-                'loccountrycode',
-                'locstatecode',
-                'gameid',
-                'gameserverip',
-                'gameextrainfo',
-                'cityid',
-                'loccityid']
+                 'profilestate',
+                 'commentpermission',
+                 'lastlogoff',
+                 'personastate',
+                 'realname',
+                 'primaryclanid',
+                 'personastateflags',
+                 'timecreated',
+                 'loccountrycode',
+                 'locstatecode',
+                 'gameid',
+                 'gameserverip',
+                 'gameextrainfo',
+                 'cityid',
+                 'loccityid']
     for user in user_data:
         remove = []
         for key in user.keys():
@@ -92,20 +99,25 @@ if cur.fetchone() == None:
 
         # update last_fetched only for search_id
         if steamid == search_id:
-            cur.execute('UPDATE User SET personaname=?, profileurl=?, avatar=?, avatarmedium=?, avatarfull=?, avatarhash=?, last_fetched=julianday("now") WHERE steamid=?', tuple(x for x in user.values()) + (steamid,))
+            cur.execute('UPDATE User SET personaname=?, profileurl=?, avatar=?, avatarmedium=?, avatarfull=?, avatarhash=?, last_fetched=julianday("now") WHERE steamid=?', tuple(
+                x for x in user.values()) + (steamid,))
             if cur.rowcount == 0:
-                cur.execute('INSERT INTO User VALUES (?,?,?,?,?,?,?,julianday("now"))', (steamid,) + tuple(x for x in user.values()))
+                cur.execute('INSERT INTO User VALUES (?,?,?,?,?,?,?,julianday("now"))',
+                            (steamid,) + tuple(x for x in user.values()))
         else:
             try:
-                cur.execute('UPDATE User SET personaname=?, profileurl=?, avatar=?, avatarmedium=?, avatarfull=?, avatarhash=? WHERE steamid=?', tuple(x for x in user.values()) + (steamid,))
+                cur.execute('UPDATE User SET personaname=?, profileurl=?, avatar=?, avatarmedium=?, avatarfull=?, avatarhash=? WHERE steamid=?', tuple(
+                    x for x in user.values()) + (steamid,))
                 if cur.rowcount == 0:
-                    cur.execute('INSERT INTO User VALUES (?,?,?,?,?,?,?,NULL)', (steamid,) + tuple(x for x in user.values()))
+                    cur.execute('INSERT INTO User VALUES (?,?,?,?,?,?,?,NULL)',
+                                (steamid,) + tuple(x for x in user.values()))
             except:
                 print(user.values())
 
     # get user game data
     for user_id in steam_ids:
-        res = requests.get(f'http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key={steam_api_key}&steamid={user_id}&include_appinfo=true&include_played_free_games=true')
+        res = requests.get(
+            f'http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key={steam_api_key}&steamid={user_id}&include_appinfo=true&include_played_free_games=true')
         # try:
         if 'games' not in res.json()['response'].keys():
             game_data = res.json()['response']
@@ -121,12 +133,15 @@ if cur.fetchone() == None:
             #         if key in to_remove:
             #             remove.append(key)
             #     [game.pop(key) for key in remove]
-        
+
             if 'playtime_2weeks' not in game.keys():
                 game['playtime_2weeks'] = 0
 
-            cur.execute('UPDATE Playtime SET playtime_forever=?, playtime_2weeks=? WHERE steamid=? AND appid=?', (game['playtime_forever'], game['playtime_2weeks'], user_id, game['appid']))
+            cur.execute('UPDATE Playtime SET playtime_forever=?, playtime_2weeks=? WHERE steamid=? AND appid=?',
+                        (game['playtime_forever'], game['playtime_2weeks'], user_id, game['appid']))
             if cur.rowcount == 0:
-                cur.execute('INSERT INTO Playtime VALUES (?,?,?,?)', (user_id, game['appid'], game['playtime_forever'], game['playtime_2weeks']))
-            cur.execute('INSERT OR IGNORE INTO Game VALUES (?,?,?,?)', (game['appid'], game['name'], game['img_icon_url'], game['img_logo_url']))
+                cur.execute('INSERT INTO Playtime VALUES (?,?,?,?)', (user_id,
+                                                                      game['appid'], game['playtime_forever'], game['playtime_2weeks']))
+            cur.execute('INSERT OR IGNORE INTO Game VALUES (?,?,?,?)',
+                        (game['appid'], game['name'], game['img_icon_url'], game['img_logo_url']))
     conn.commit()
